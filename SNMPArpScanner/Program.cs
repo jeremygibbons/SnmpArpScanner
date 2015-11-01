@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using SnmpSharpNet;
 using CommandLine;
 
 namespace SNMPArpScanner
 {
-    using ScanResultType = Tuple<IpAddress, IpAddress, System.Net.NetworkInformation.PhysicalAddress, string>;
+    using ScanResultType = Tuple<IPAddress, IPAddress, IPHostEntry, System.Net.NetworkInformation.PhysicalAddress>;
 
     class Program
     {
@@ -46,7 +47,11 @@ namespace SNMPArpScanner
                         string s = String.Empty;
                         while ((s = r.ReadLine()) != null)
                         {
-                            
+                            string[] separators = options.separator == "" ?
+                                new string[] { System.Globalization.CultureInfo.CurrentUICulture.TextInfo.ListSeparator } :
+                                new string[] { options.separator };
+                            string[] lineElts = s.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+
                         }
                     }
                 }
@@ -61,21 +66,25 @@ namespace SNMPArpScanner
                         //TODO: improve error handling
                         continue;
                     }
-                    results.AddRange(ScanTarget(targetIP, param));
+                    results.AddRange(ScanTarget(targetIP, param, options.IncludeMulticastIPs));
+                    foreach(ScanResultType result in results)
+                    {
+                        Console.WriteLine("{0} : {1}", result.Item2.ToString(), result.Item4.ToString());
+                    }
                 }
             }
 
             Console.ReadLine();
         }
 
-        static List<ScanResultType> ScanTarget(IpAddress ip, AgentParameters agparam)
+        static List<ScanResultType> ScanTarget(IpAddress ip, AgentParameters agparam, bool includeMulticast)
         {
             // Construct target
             UdpTarget target = new UdpTarget((System.Net.IPAddress) ip, 161, 2000, 0);
 
             // Define Oid that is the root of the MIB
             //  tree you wish to retrieve
-            Oid rootOid = new Oid("1.3.6.1.2.1.3.1.1.2");
+            Oid rootOid = new Oid("1.3.6.1.2.1.4.22");
 
             // This Oid represents last Oid returned by
             //  the SNMP agent
@@ -134,38 +143,45 @@ namespace SNMPArpScanner
                             // Check that retrieved Oid is "child" of the root OID
                             if (rootOid.IsRootOf(v.Oid))
                             {
+                                lastOid = v.Oid;
+
                                 string[] oidparts = v.Oid.ToString().Split('.');
+                                int FirstByte = int.Parse(oidparts[oidparts.Length - 4]);
+
+                                //skip multicast IPs from 224.0.0.0/4
+                                if (includeMulticast == false && FirstByte >= 224 && FirstByte <= 239)
+                                    continue;
+
                                 string ipstr = String.Join(".", new ArraySegment<String>(oidparts, oidparts.Length - 4, 4));
+
+                                //skip limited broadcast IP per RFC 6890
+                                if (ipstr == "255.255.255.255")
+                                    continue;
+
                                 IpAddress arpip = new IpAddress(ipstr);
+ 
+                                string m = String.Join("-", v.Value.ToString().ToUpper().Split());
 
-                                string m = String.Join("-", v.Value.ToString().Split());
+                                //skip broadcast MAC
+                                if (m == "FF-FF-FF-FF-FF-FF")
+                                    continue;
 
-                                System.Net.NetworkInformation.PhysicalAddress mac = System.Net.NetworkInformation.PhysicalAddress.Parse(m);
+                                if (m == "00-00-00-00-00-00")
+                                    continue;
 
-                                System.Net.IPHostEntry host;
-                                string dnsname = "";
+                                System.Net.NetworkInformation.PhysicalAddress mac;
+
                                 try
                                 {
-                                    host = System.Net.Dns.GetHostEntry((System.Net.IPAddress) arpip);
-                                    dnsname = host.HostName;
+                                    mac = System.Net.NetworkInformation.PhysicalAddress.Parse(m);
                                 }
-                                catch (System.ArgumentException ae)
+                                catch (FormatException fe)
                                 {
-                                    Console.WriteLine("Invalid IP Address: " + ae.Message);
-                                }
-                                catch (System.Net.Sockets.SocketException se)
-                                {
-                                    Console.WriteLine("Could not connect to ip " + arpip.ToString() + ". " + se.Message);
+                                    //Console.WriteLine("Skipping invalid physical address. " + fe.Message);
+                                    continue;
                                 }
 
-                                results.Add(new ScanResultType(ip, arpip, mac, dnsname));
-
-                                Console.WriteLine("{0} : {1}, {2}",
-                                    arpip.ToString(),
-                                    mac.ToString(),
-                                    dnsname);
-
-                                lastOid = v.Oid;
+                                results.Add(new ScanResultType((IPAddress) ip, (IPAddress) arpip, null, mac));
                             }
                             else
                             {
