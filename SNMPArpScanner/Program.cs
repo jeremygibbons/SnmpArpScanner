@@ -1,15 +1,15 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Net;
-using System.Net.Sockets;
-using System.Linq;
 //using SnmpSharpNet;
 using Lextm.SharpSnmpLib;
+using Lextm.SharpSnmpLib.Messaging;
 using CommandLine;
 
 namespace SNMPArpScanner
 {
-    using ScanResultType = Tuple<IPAddress, IPAddress, IPHostEntry, System.Net.NetworkInformation.PhysicalAddress>;
+    //using ScanResultType = Tuple<IPAddress, IPAddress, IPHostEntry, System.Net.NetworkInformation.PhysicalAddress>;
 
     class Program
     {
@@ -20,7 +20,7 @@ namespace SNMPArpScanner
 
             var exitCode = result.MapResult(
                 (ScanOptions options) => {
-                    ARPScan(options);
+                    ARPScan2(options);
                     return 0;
                 },
                 errors => {
@@ -30,72 +30,84 @@ namespace SNMPArpScanner
 
         static void ARPScan2(ScanOptions options)
         {
-
-            List<ScanResultType> results = new List<ScanResultType>();
-
-            if (options.FromFile)
-            {
-                foreach (string filename in options.StringSeq)
-                {
-                    using (System.IO.TextReader r = System.IO.File.OpenText(filename))
-                    {
-                        string s = String.Empty;
-                        while ((s = r.ReadLine()) != null)
-                        {
-                            string[] separators = options.separator == "" ?
-                                new string[] { System.Globalization.CultureInfo.CurrentUICulture.TextInfo.ListSeparator } :
-                                new string[] { options.separator };
-                            string[] lineElts = s.Split(separators, StringSplitOptions.RemoveEmptyEntries);
-
-                        }
-                    }
-                }
-            }
-            else
-            {
-                foreach (string target in options.StringSeq)
-                {
-                    IPAddress targetIP;
-                    bool parsed = IPAddress.TryParse(target, out targetIP);
-
-                    if (!parsed)
-                    {
-                        foreach (IPAddress address in
-                            Dns.GetHostAddresses(target).Where(address => address.AddressFamily == AddressFamily.InterNetwork))
-                        {
-                            targetIP = address;
-                            break;
-                        }
-
-                        if (targetIP == null)
-                        {
-                            Console.WriteLine("invalid host or wrong IP address found: " + target);
-                            continue;
-                        }
-                    }
-
-                    
-                    results.AddRange(ScanTarget(targetIP, param, options.IncludeMulticastIPs));
-                    foreach (ScanResultType result in results)
-                    {
-                        Console.WriteLine("{0} : {1}", result.Item2.ToString(), result.Item4.ToString());
-                    }
-                }
-            }
-
+            ScanTarget(null, options);
             Console.ReadLine();
-
-
-
-
-
-            IPAddress ip;
-            
-           
         }
 
+        static List<ArpEntry> ScanTarget(IPAddress ip, ScanOptions options)
+        {
+            List<ArpEntry> results = new List<ArpEntry>();
 
-        static void ARPScan(ScanOptions options) {
+            OctetString community = new OctetString(options.Community);
+
+            var ARPTypeResult = new List<Variable>();
+            Messenger.BulkWalk(VersionCode.V2,
+                new IPEndPoint(IPAddress.Parse("127.0.0.1"), 161),
+                new OctetString(options.Community),
+                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.4"),
+                ARPTypeResult,
+                60000,
+                10,
+                WalkMode.WithinSubtree,
+                null,
+                null);
+
+            var ARPPhysAddrResult = new List<Variable>();
+            Messenger.BulkWalk(VersionCode.V2,
+                new IPEndPoint(IPAddress.Parse("127.0.0.1"), 161),
+                new OctetString(options.Community),
+                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.2"),
+                ARPPhysAddrResult,
+                60000,
+                10,
+                WalkMode.WithinSubtree,
+                null,
+                null);
+
+            var ARPIPResult = new List<Variable>();
+            Messenger.BulkWalk(VersionCode.V2,
+                new IPEndPoint(IPAddress.Parse("127.0.0.1"), 161),
+                new OctetString(options.Community),
+                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.3"),
+                ARPIPResult,
+                60000,
+                10,
+                WalkMode.WithinSubtree,
+                null,
+                null);
+
+
+            foreach (Variable v in ARPTypeResult)
+            {
+                if (v.Data.Equals(new Integer32(4)) && options.ProcessStaticARPEntries == false)
+                    continue;
+                else if (v.Data.Equals(new Integer32(3)) && options.ProcessDynamicARPEntries == false)
+                    continue;
+                else if (v.Data.Equals(new Integer32(2)) && options.ProcessInvalidARPEntries == false)
+                    continue;
+                else if (v.Data.Equals(new Integer32(1)) && options.ProcessOtherARPEntries == false)
+                    continue;
+
+                uint[] numID = v.Id.ToNumerical().ToArray();
+
+                numID[9] = 3;
+                ObjectIdentifier IPID = new ObjectIdentifier(numID);
+
+                ISnmpData IPData = ARPIPResult.Where(i => i.Id == IPID).Select(x => x).Single().Data;
+
+                numID[9] = 2;
+                ObjectIdentifier PhysAddrID = new ObjectIdentifier(numID);
+                ISnmpData PhysAddrData = ARPPhysAddrResult.Where(i => i.Id == PhysAddrID).Select(x => x).Single().Data;
+
+                System.Net.NetworkInformation.PhysicalAddress mac = new System.Net.NetworkInformation.PhysicalAddress(PhysAddrData.ToBytes().Skip(2).ToArray());
+
+                Console.WriteLine(IPData + " " + mac);
+            }
+
+            return results;
+        }
+
+     /*   static void ARPScan(CLIOptions options) {
             
             // SNMP community name
             OctetString community = new OctetString(options.Community);
@@ -247,7 +259,7 @@ namespace SNMPArpScanner
                                 }
                                 catch (FormatException fe)
                                 {
-                                    //Console.WriteLine("Skipping invalid physical address. " + fe.Message);
+                                    Console.WriteLine("Skipping invalid physical address. " + fe.Message);
                                     continue;
                                 }
 
@@ -270,5 +282,6 @@ namespace SNMPArpScanner
             target.Close();
             return results;
         }
+        */
     }
 }
