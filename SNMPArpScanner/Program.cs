@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Net;
-using SnmpSharpNet;
+using System.Net.Sockets;
+using System.Linq;
+//using SnmpSharpNet;
+using Lextm.SharpSnmpLib;
 using CommandLine;
 
 namespace SNMPArpScanner
@@ -13,10 +16,10 @@ namespace SNMPArpScanner
         static void Main(string[] args)
         {
 
-            var result = CommandLine.Parser.Default.ParseArguments<CLIOptions>(args);
+            var result = CommandLine.Parser.Default.ParseArguments<ScanOptions>(args);
 
             var exitCode = result.MapResult(
-                (CLIOptions options) => {
+                (ScanOptions options) => {
                     ARPScan(options);
                     return 0;
                 },
@@ -25,7 +28,74 @@ namespace SNMPArpScanner
                 });
         }
 
-        static void ARPScan(CLIOptions options) {
+        static void ARPScan2(ScanOptions options)
+        {
+
+            List<ScanResultType> results = new List<ScanResultType>();
+
+            if (options.FromFile)
+            {
+                foreach (string filename in options.StringSeq)
+                {
+                    using (System.IO.TextReader r = System.IO.File.OpenText(filename))
+                    {
+                        string s = String.Empty;
+                        while ((s = r.ReadLine()) != null)
+                        {
+                            string[] separators = options.separator == "" ?
+                                new string[] { System.Globalization.CultureInfo.CurrentUICulture.TextInfo.ListSeparator } :
+                                new string[] { options.separator };
+                            string[] lineElts = s.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+
+                        }
+                    }
+                }
+            }
+            else
+            {
+                foreach (string target in options.StringSeq)
+                {
+                    IPAddress targetIP;
+                    bool parsed = IPAddress.TryParse(target, out targetIP);
+
+                    if (!parsed)
+                    {
+                        foreach (IPAddress address in
+                            Dns.GetHostAddresses(target).Where(address => address.AddressFamily == AddressFamily.InterNetwork))
+                        {
+                            targetIP = address;
+                            break;
+                        }
+
+                        if (targetIP == null)
+                        {
+                            Console.WriteLine("invalid host or wrong IP address found: " + target);
+                            continue;
+                        }
+                    }
+
+                    
+                    results.AddRange(ScanTarget(targetIP, param, options.IncludeMulticastIPs));
+                    foreach (ScanResultType result in results)
+                    {
+                        Console.WriteLine("{0} : {1}", result.Item2.ToString(), result.Item4.ToString());
+                    }
+                }
+            }
+
+            Console.ReadLine();
+
+
+
+
+
+            IPAddress ip;
+            
+           
+        }
+
+
+        static void ARPScan(ScanOptions options) {
             
             // SNMP community name
             OctetString community = new OctetString(options.Community);

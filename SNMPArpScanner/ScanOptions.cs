@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SNMPArpScanner
 {
-    class CLIOptions
+    class ScanOptions
     {
         [Option('f', "file", Required = false, 
             HelpText = "Read targets from file rather than argument")]
