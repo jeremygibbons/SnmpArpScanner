@@ -1,23 +1,26 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Net;
-using SnmpSharpNet;
+//using SnmpSharpNet;
+using Lextm.SharpSnmpLib;
+using Lextm.SharpSnmpLib.Messaging;
 using CommandLine;
 
 namespace SNMPArpScanner
 {
-    using ScanResultType = Tuple<IPAddress, IPAddress, IPHostEntry, System.Net.NetworkInformation.PhysicalAddress>;
+    //using ScanResultType = Tuple<IPAddress, IPAddress, IPHostEntry, System.Net.NetworkInformation.PhysicalAddress>;
 
     class Program
     {
         static void Main(string[] args)
         {
 
-            var result = CommandLine.Parser.Default.ParseArguments<CLIOptions>(args);
+            var result = CommandLine.Parser.Default.ParseArguments<ScanOptions>(args);
 
             var exitCode = result.MapResult(
-                (CLIOptions options) => {
-                    ARPScan(options);
+                (ScanOptions options) => {
+                    ARPScan2(options);
                     return 0;
                 },
                 errors => {
@@ -25,7 +28,86 @@ namespace SNMPArpScanner
                 });
         }
 
-        static void ARPScan(CLIOptions options) {
+        static void ARPScan2(ScanOptions options)
+        {
+            ScanTarget(null, options);
+            Console.ReadLine();
+        }
+
+        static List<ArpEntry> ScanTarget(IPAddress ip, ScanOptions options)
+        {
+            List<ArpEntry> results = new List<ArpEntry>();
+
+            OctetString community = new OctetString(options.Community);
+
+            var ARPTypeResult = new List<Variable>();
+            Messenger.BulkWalk(VersionCode.V2,
+                new IPEndPoint(IPAddress.Parse("127.0.0.1"), 161),
+                new OctetString(options.Community),
+                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.4"),
+                ARPTypeResult,
+                60000,
+                10,
+                WalkMode.WithinSubtree,
+                null,
+                null);
+
+            var ARPPhysAddrResult = new List<Variable>();
+            Messenger.BulkWalk(VersionCode.V2,
+                new IPEndPoint(IPAddress.Parse("127.0.0.1"), 161),
+                new OctetString(options.Community),
+                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.2"),
+                ARPPhysAddrResult,
+                60000,
+                10,
+                WalkMode.WithinSubtree,
+                null,
+                null);
+
+            var ARPIPResult = new List<Variable>();
+            Messenger.BulkWalk(VersionCode.V2,
+                new IPEndPoint(IPAddress.Parse("127.0.0.1"), 161),
+                new OctetString(options.Community),
+                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.3"),
+                ARPIPResult,
+                60000,
+                10,
+                WalkMode.WithinSubtree,
+                null,
+                null);
+
+
+            foreach (Variable v in ARPTypeResult)
+            {
+                if (v.Data.Equals(new Integer32(4)) && options.ProcessStaticARPEntries == false)
+                    continue;
+                else if (v.Data.Equals(new Integer32(3)) && options.ProcessDynamicARPEntries == false)
+                    continue;
+                else if (v.Data.Equals(new Integer32(2)) && options.ProcessInvalidARPEntries == false)
+                    continue;
+                else if (v.Data.Equals(new Integer32(1)) && options.ProcessOtherARPEntries == false)
+                    continue;
+
+                uint[] numID = v.Id.ToNumerical().ToArray();
+
+                numID[9] = 3;
+                ObjectIdentifier IPID = new ObjectIdentifier(numID);
+
+                ISnmpData IPData = ARPIPResult.Where(i => i.Id == IPID).Select(x => x).Single().Data;
+
+                numID[9] = 2;
+                ObjectIdentifier PhysAddrID = new ObjectIdentifier(numID);
+                ISnmpData PhysAddrData = ARPPhysAddrResult.Where(i => i.Id == PhysAddrID).Select(x => x).Single().Data;
+
+                System.Net.NetworkInformation.PhysicalAddress mac = new System.Net.NetworkInformation.PhysicalAddress(PhysAddrData.ToBytes().Skip(2).ToArray());
+
+                Console.WriteLine(IPData + " " + mac);
+            }
+
+            return results;
+        }
+
+     /*   static void ARPScan(CLIOptions options) {
             
             // SNMP community name
             OctetString community = new OctetString(options.Community);
@@ -177,7 +259,7 @@ namespace SNMPArpScanner
                                 }
                                 catch (FormatException fe)
                                 {
-                                    //Console.WriteLine("Skipping invalid physical address. " + fe.Message);
+                                    Console.WriteLine("Skipping invalid physical address. " + fe.Message);
                                     continue;
                                 }
 
@@ -200,5 +282,6 @@ namespace SNMPArpScanner
             target.Close();
             return results;
         }
+        */
     }
 }
