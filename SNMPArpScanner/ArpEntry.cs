@@ -5,14 +5,14 @@ namespace SNMPArpScanner
 {
     class ArpEntry
     {
-        IPHostEntry ipEntry;
-        PhysicalAddress physAddress;
+        public IPHostEntry ipEntry { get; }
+        public PhysicalAddress physAddress { get; }
 
-        ArpEntry(IPAddress ip, PhysicalAddress mac)
+        public ArpEntry(IPAddress ip, PhysicalAddress mac)
         {
             ipEntry = new IPHostEntry();
             ipEntry.AddressList = new IPAddress[] { ip };
             physAddress = mac;
-        }
+        } 
     }
 }

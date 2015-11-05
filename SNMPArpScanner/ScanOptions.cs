@@ -16,7 +16,7 @@ namespace SNMPArpScanner
             HelpText = "SNMPv2 community to be used")]
         public string Community { get; set; }
 
-        [Option('o', "output", Required = false,
+        [Option('o', "output", Default = "", Required = false,
             HelpText = "File to write output to, if none default to stdout")]
         public string OutputFileName { get; set; }
 
