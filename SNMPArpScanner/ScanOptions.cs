@@ -24,14 +24,6 @@ namespace SNMPArpScanner
             HelpText = "Attempt to resolve IPs to DNS names")]
         public bool ResolveIPsToHostNames { get; set; }
 
-        [Option('m', "multicast", Required = false, Default = false, 
-            HelpText ="include multicast IPs in results")]
-        public bool IncludeMulticastIPs { get; set; }
-
-        [Option('b', "broadcast", Required = false, Default = false,
-            HelpText = "Include broadcast IPs and MACs")]
-        public bool IncludeBroadcastAddresses { get; set; }
-
         [Option('D', "dynamic", Required = false, Default = true,
             HelpText = "Process dynamic ARP entries")]
         public bool ProcessDynamicARPEntries { get; set; }
