@@ -134,41 +134,50 @@ namespace SNMPArpScanner
 
             OctetString community = new OctetString(options.Community);
 
-            var ARPTypeResult = new List<Variable>();
-            Messenger.BulkWalk(VersionCode.V2,
-                new IPEndPoint(ip, 161),
-                new OctetString(options.Community),
-                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.4"),
-                ARPTypeResult,
-                60000,
-                10,
-                WalkMode.WithinSubtree,
-                null,
-                null);
+            List<Variable> ARPTypeResult = new List<Variable>();
+            List<Variable> ARPIPResult = new List<Variable>();
+            List<Variable> ARPPhysAddrResult = new List<Variable>();
 
-            var ARPPhysAddrResult = new List<Variable>();
-            Messenger.BulkWalk(VersionCode.V2,
-                new IPEndPoint(ip, 161),
-                new OctetString(options.Community),
-                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.2"),
-                ARPPhysAddrResult,
-                60000,
-                10,
-                WalkMode.WithinSubtree,
-                null,
-                null);
+            try
+            {
+                Messenger.BulkWalk(VersionCode.V2,
+                    new IPEndPoint(ip, 161),
+                    new OctetString(options.Community),
+                    new ObjectIdentifier("1.3.6.1.2.1.4.22.1.4"),
+                    ARPTypeResult,
+                    options.SNMPTimeout,
+                    10,
+                    WalkMode.WithinSubtree,
+                    null,
+                    null);
 
-            var ARPIPResult = new List<Variable>();
-            Messenger.BulkWalk(VersionCode.V2,
-                new IPEndPoint(ip, 161),
-                new OctetString(options.Community),
-                new ObjectIdentifier("1.3.6.1.2.1.4.22.1.3"),
-                ARPIPResult,
-                60000,
-                10,
-                WalkMode.WithinSubtree,
-                null,
-                null);
+                Messenger.BulkWalk(VersionCode.V2,
+                    new IPEndPoint(ip, 161),
+                    new OctetString(options.Community),
+                    new ObjectIdentifier("1.3.6.1.2.1.4.22.1.2"),
+                    ARPPhysAddrResult,
+                    options.SNMPTimeout,
+                    10,
+                    WalkMode.WithinSubtree,
+                    null,
+                    null);
+
+                Messenger.BulkWalk(VersionCode.V2,
+                    new IPEndPoint(ip, 161),
+                    new OctetString(options.Community),
+                    new ObjectIdentifier("1.3.6.1.2.1.4.22.1.3"),
+                    ARPIPResult,
+                    options.SNMPTimeout,
+                    10,
+                    WalkMode.WithinSubtree,
+                    null,
+                    null);
+            }
+            catch(Lextm.SharpSnmpLib.Messaging.TimeoutException te)
+            {
+                Console.WriteLine("Request to {0} timed out, skipping... : {1}", ip, te);
+                return results;
+            }
 
 
             foreach (Variable v in ARPTypeResult)

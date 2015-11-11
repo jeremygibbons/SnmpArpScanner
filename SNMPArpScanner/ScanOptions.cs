@@ -24,6 +24,10 @@ namespace SNMPArpScanner
             HelpText = "Attempt to resolve IPs to DNS names")]
         public bool ResolveIPsToHostNames { get; set; }
 
+        [Option('t', "timeout", Required = false, Default = 2000,
+            HelpText = "Timeout for SNMP requests in milliseconds")]
+        public int SNMPTimeout { get; set; }
+
         [Option('D', "dynamic", Required = false, Default = true,
             HelpText = "Process dynamic ARP entries")]
         public bool ProcessDynamicARPEntries { get; set; }
